@@ -1,113 +1,120 @@
+
 #include <ESP8266WiFi.h>
 #include <MicroGear.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
-const char* ssid     = "your SSID"; //change this to your SSID
-const char* password = "your PASSWORD"; //change this to your PASSWORD
 
-const char* host = "your linebot server";//change this to your linebot server ex.http://numpapick-linebot.herokuapp.com/bot.php
-#define APPID   "your APPID"     //change this to your APPID
-#define KEY     "your KEY"     //change this to your KEY
-#define SECRET  "your SECRET"     //change this to your SECRET
+const char* ssid     = "ANANYA CAFE";         //change this to your SSID
+const char* password = "0844845345";         //change this to your PASSWORD
 
-#define ALIAS   "NodeMCU1" //set name of drvice
-#define TargetWeb "switch" //set target name of web
+const char* host =  "https://javis03.herokuapp.com/"; //PUT your Heroku App Name ex.http://mylinebot.herokuapp.com/bot.php
+//NETPIE-Info
+#define APPID       "javissut"    //Same data at Line#3 of pub.php
+#define KEY         "5ZIetcbBpjytH4u"        //Same data at Line#4 of pub.php
+#define SECRET      "kp5ZWdoL9i3jp53qK73YTr9vb"     //Same data at Line#5 of pub.php
+
+#define ALIAS   "ESP8266"                    //set name of device
 
 WiFiClient client;
-String uid = "";
 int timer = 0;
 MicroGear microgear(client);
 
-void onMsghandler(char *topic, uint8_t* msg, unsigned int msglen) { // 
-    Serial.print("Incoming message -->");
-    msg[msglen] = '\0';
-Serial.println((char *)msg);
-    if(*(char *)msg == '1'){
-        digitalWrite(LED_BUILTIN, LOW);   // LED on
-        //microgear.chat(TargetWeb,"1");
-        //send_data("ESP_LED_ON");
-        send_json("ESP LED ON");
-    }else{
-        digitalWrite(LED_BUILTIN, HIGH);  // LED off
-      //microgear.chat(TargetWeb,"0");
-      //send_data("ESP_LED_OFF");
-      send_json("ESP LED OFF");
-    }
+void onMsghandler(char *topic, uint8_t* msg, unsigned int msglen) {
+  Serial.print("LINE MSG is");
+  msg[msglen] = '\0';
+  Serial.println((char *)msg);
+  String msgLINE = (char *)msg;
+  if ( msgLINE == "ON" || msgLINE == "On" || msgLINE == "on" ) {
+    send_json("Turn on LED");
+    digitalWrite(D0, HIGH);         // LED on
+  } 
+  else if ( msgLINE == "OFF" || msgLINE == "Off"  || msgLINE == "off" ) {
+    send_json("Turn off LED");
+    digitalWrite(D0, LOW);          // LED off
+  }
+  else if ( msgLINE == "RESET" || msgLINE == "Reset"  || msgLINE == "reset" ) {
+    send_json("System Resetting");
+    delay(5000);
+    ESP.restart();
+  }
+  else {
+    send_json("Syntax error command");
+  }
 }
 
 void onConnected(char *attribute, uint8_t* msg, unsigned int msglen) {
-    Serial.println("Connected to NETPIE...");
-    microgear.setName(ALIAS);
+  Serial.println("NETPIE is connected");
+  microgear.setName(ALIAS);
 }
 
+void send_json(String data) {
+  StaticJsonDocument<300> JSONencoder;
+
+  JSONencoder["ESP"] = data;
+
+  JsonArray values = JSONencoder.createNestedArray("values"); //JSON array
+  values.add(20); //Add value to array
+  values.add(21); //Add value to array
+  values.add(23); //Add value to array
+
+  char JSONmessageBuffer[300];
+  serializeJsonPretty(JSONencoder, JSONmessageBuffer, sizeof(JSONmessageBuffer));
+  Serial.println(JSONmessageBuffer);
+
+  HTTPClient http;
+
+  http.begin(host);
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.POST(JSONmessageBuffer);
+  String payload = http.getString();
+
+  Serial.println(httpCode);
+  Serial.println(payload);
+
+  http.end();
+}
 
 void setup() {
-    microgear.on(MESSAGE,onMsghandler);
-    microgear.on(CONNECTED,onConnected);
+  microgear.setEEPROMOffset(3000);
+  microgear.on(MESSAGE, onMsghandler);
+  microgear.on(CONNECTED, onConnected);
 
-    Serial.begin(115200);
-    Serial.println("Starting...");
+  Serial.begin(115200);
+  Serial.println("Starting...");
 
-    pinMode(LED_BUILTIN, OUTPUT);
-  
-    if (WiFi.begin(ssid, password)) {
-        while (WiFi.status() != WL_CONNECTED) {
-            delay(500);
-            Serial.print(".");
-        }
+  pinMode(16, OUTPUT);
+
+  if (WiFi.begin(ssid, password)) {
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
     }
+  }
 
-Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 
-    microgear.init(KEY,SECRET,ALIAS);
-    microgear.connect(APPID);
-     digitalWrite(LED_BUILTIN, HIGH);   // LED on
+  microgear.resetToken();
+  microgear.init(KEY, SECRET, ALIAS);
+  microgear.connect(APPID);
+  digitalWrite(16, HIGH);   // LED on
 }
 
-void send_json(String data){
-  StaticJsonBuffer<300> JSONbuffer;   //Declaring static JSON buffer
-    JsonObject& JSONencoder = JSONbuffer.createObject(); 
- 
-    JSONencoder["ESP"] = data;
- 
-    JsonArray& values = JSONencoder.createNestedArray("values"); //JSON array
-    values.add(20); //Add value to array
-    values.add(21); //Add value to array
-    values.add(23); //Add value to array
- 
- 
-    char JSONmessageBuffer[300];
-    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-    Serial.println(JSONmessageBuffer);
- 
-    HTTPClient http;    //Declare object of class HTTPClient
- 
-    http.begin(host);      //Specify request destination
-    http.addHeader("Content-Type", "application/json");  //Specify content-type header
- 
-    int httpCode = http.POST(JSONmessageBuffer);   //Send the request
-    String payload = http.getString();                                        //Get the response payload
- 
-    Serial.println(httpCode);   //Print HTTP return code
-    Serial.println(payload);    //Print request response payload
- 
-    http.end();  //Close connection
-}
 void loop() {
-    if (microgear.connected()) {
-        Serial.println("..."); 
-        microgear.loop();
-        timer = 0;
+  if (microgear.connected()) {
+    Serial.println("NETPIE is connecting!");
+    microgear.loop();
+    timer = 0;
+  }
+  else {
+    Serial.println("NETPIE is reconnecting...");
+    if (timer >= 5000) {
+      microgear.connect(APPID);
+      timer = 0;
     }
-    else {
-        Serial.println("connection lost, reconnect...");
-        if (timer >= 5000) {
-            microgear.connect(APPID); 
-            timer = 0;
-        }
-        else timer += 100;
-    }
-    delay(100);
+    else timer += 100;
+  }
+  delay(100);
 }
